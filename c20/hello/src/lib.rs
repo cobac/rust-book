@@ -1,4 +1,7 @@
-use std::thread;
+use std::{
+    sync::{mpsc, Arc, Mutex},
+    thread,
+};
 
 struct Worker {
     id: usize,
@@ -6,15 +9,26 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(id: usize) -> Self {
-        let handle = thread::spawn(|| {});
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Self {
+        let handle = thread::spawn(move || loop {
+            let job = receiver
+                .lock()
+                .expect("A thread holding the mutex lock did a panic")
+                .recv()
+                .expect("Sender thread is down");
+            println!("Worker {id} got a job; executing.");
+            job();
+        });
         Self { id, handle }
     }
 }
 
 pub struct ThreadPool {
-    threads: Vec<Worker>,
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Job>,
 }
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
 
 impl ThreadPool {
     /// Create a new ThreadPool.
@@ -26,15 +40,21 @@ impl ThreadPool {
     /// The `new` function will panic if the size is zero.
     pub fn new(size: usize) -> ThreadPool {
         assert!(size > 0);
+
+        let (sender, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+
         let mut workers = Vec::with_capacity(size);
         for worker_id in 0..size {
-            workers.push(Worker::new(worker_id));
+            workers.push(Worker::new(worker_id, Arc::clone(&receiver)));
         }
-        ThreadPool { threads: workers }
+        ThreadPool { workers, sender }
     }
     pub fn execute<F>(&self, f: F)
     where
         F: FnOnce() + Send + 'static,
     {
+        let job = Box::new(f);
+        self.sender.send(job).unwrap();
     }
 }

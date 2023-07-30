@@ -20,11 +20,15 @@ fn main() {
 
 fn handle_connection(mut stream: TcpStream) {
     let buf_reader = BufReader::new(&mut stream);
+
+    // Whole line unwrapped
     // let http_request: Vec<_> = buf_reader
     //     .lines()
     //     .map(|result| result.unwrap())
     //     .take_while(|line| !line.is_empty())
     //     .collect();
+
+    // First line
     let request_line = buf_reader.lines().next().unwrap().unwrap();
 
     println!("Request head: {:#?}", request_line);
@@ -35,7 +39,6 @@ fn handle_connection(mut stream: TcpStream) {
             thread::sleep(Duration::from_secs(5));
             ("HTTP/1.1 200 OK", "hello.html")
         }
-
         _ => ("HTTP/1.1 404 NOT FOUND", "404.html"),
     };
 
